@@ -1,0 +1,30 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+data/
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python environment and cache
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local datasets
+data/raw/
+data/processed/
+
+# Local reports: select safe summaries before publishing
+reports/*
+
+# Local logs and credentials
+*.log
+secrets/
+
+# Local editor settings
+.vscode/
