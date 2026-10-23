@@ -66,7 +66,8 @@ def find_confirmed_pivots(df, timeframe):
     """Pivot only becomes usable after PIVOT_RIGHT candles have closed."""
     highs = df["high"].to_numpy()
     lows = df["low"].to_numpy()
-    times = df["time"].to_numpy()
+    times = df["time"].tolist()
+    confirm_delay = {"h1": pd.Timedelta(hours=1), "m15": pd.Timedelta(minutes=15)}[timeframe]
     atr = df[f"{timeframe}_atr14"].to_numpy()
     pivots = []
 
@@ -79,7 +80,7 @@ def find_confirmed_pivots(df, timeframe):
                 pivots.append(
                     {
                         "pivot_time": pd.Timestamp(times[i]),
-                        "confirmed_at": pd.Timestamp(times[i + PIVOT_RIGHT]),
+                        "confirmed_at": pd.Timestamp(times[i + PIVOT_RIGHT]) + confirm_delay,
                         "price": float(highs[i]),
                         "kind": "RESISTANCE",
                         "source_tf": timeframe.upper(),
