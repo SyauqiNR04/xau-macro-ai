@@ -39,6 +39,12 @@ def load_bars(timeframe):
         .drop_duplicates("time")
         .reset_index(drop=True)
     )
+    durations = {"m5": pd.Timedelta(minutes=5), "m15": pd.Timedelta(minutes=15),
+                 "h1": pd.Timedelta(hours=1), "h4": pd.Timedelta(hours=4)}
+    closed_before = pd.Timestamp.now(tz="UTC") - durations[timeframe]
+    df = df[df["time"] <= closed_before].reset_index(drop=True)
+    if df.empty:
+        raise ValueError(f"Tidak ada candle {timeframe.upper()} yang sudah tertutup.")
     return df
 
 
