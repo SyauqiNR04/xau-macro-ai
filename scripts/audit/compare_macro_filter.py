@@ -42,6 +42,10 @@ def main():
     baseline_report = reports / "snr_development_summary.csv"
     if not baseline_report.exists():
         raise SystemExit("Blocked: run scripts/run_snr_backtest.py and review its development report first.")
+    baseline = pd.read_csv(baseline_report)
+    required_baseline = {"strategy", "expectancy_R", "ci_low_R", "ci_high_R", "trades"}
+    if not required_baseline.issubset(baseline.columns) or not baseline["strategy"].astype(str).str.startswith("development slippage=").all():
+        raise SystemExit("Blocked: this is not a current development-only report with expectancy CI. Rerun the maintained baseline runner first.")
     raw_dir = ROOT / d["raw_dir"]
     df = build_signals(raw_dir, d["symbol_file"], left=s["pivot_left"], right=s["pivot_right"],
         max_age_days=s["max_pivot_age_days"], tolerance_atr=s["zone_tolerance_atr"],
