@@ -151,7 +151,7 @@ def simulate_vectorized(df, *, slippage_usd=0.10, atr_stop_mult=1.5, target_r=2.
     entry = np.where(dirs == 1, entry_open + entry_spread + slippage_usd, entry_open - slippage_usd)
     stop = np.where(dirs == 1, entry - risk, entry + risk)
     target = np.where(dirs == 1, entry + target_r * risk, entry - target_r * risk)
-    idx = entry_idx[:, None] + np.arange(1, max_hold_bars + 1)[None, :]
+    idx = entry_idx[:, None] + np.arange(0, max_hold_bars)[None, :]
     in_bounds = idx < len(df)
     safe_idx = np.minimum(idx, len(df) - 1)
     op = df["open"].to_numpy(dtype=float)[safe_idx]
@@ -178,7 +178,7 @@ def simulate_vectorized(df, *, slippage_usd=0.10, atr_stop_mult=1.5, target_r=2.
                          np.where(hit_open+hit_spread <= target, hit_open+hit_spread+slippage_usd, target+slippage_usd))
     exit_px = np.where(stop_first, stop_px, target_px)
     reason = np.where(stop_first, "SL", "TP").astype(object)
-    last_idx = np.minimum(entry_idx + max_hold_bars, len(df)-1)
+    last_idx = np.minimum(entry_idx + max_hold_bars - 1, len(df)-1)
     no_hit = ~has_hit
     exit_idx[no_hit] = last_idx[no_hit]
     last_close = df["close"].to_numpy(dtype=float)[last_idx]
