@@ -109,6 +109,7 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
     zone_kind = np.full(len(df), "", dtype=object)
     cursor, expiry_cursor = 0, 0
     active_map, active_cache = {}, pd.DataFrame()
+    active_prices = np.array([], dtype=float)
     for i, row in enumerate(df.itertuples(index=False)):
         now = row.signal_time
         changed = False
@@ -124,13 +125,20 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
             changed = True
         if changed:
             active_cache = pd.DataFrame(list(active_map.values()))
+            active_prices = active_cache["price"].to_numpy(dtype=float) if not active_cache.empty else np.array([], dtype=float)
         if active_cache.empty:
             continue
         active = active_cache
         atr = row.m5_atr14
         if not np.isfinite(atr) or atr <= 0 or not np.isfinite(row.h4_ema200) or not np.isfinite(row.h1_ema50):
             continue
-        zones = _zones_at(active, now, float(row.close), float(atr), max_age_days,
+        radius = float(atr) * (max_width_atr + tolerance_atr)
+        nearby_idx = np.flatnonzero((active_prices >= float(row.close) - radius) &
+                                    (active_prices <= float(row.close) + radius))
+        if len(nearby_idx) < min_pivots:
+            continue
+        nearby = active.iloc[nearby_idx]
+        zones = _zones_at(nearby, now, float(row.close), float(atr), max_age_days,
                           tolerance_atr, min_pivots, max_width_atr)
         if not zones:
             continue
