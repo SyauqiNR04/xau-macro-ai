@@ -36,7 +36,7 @@ def main():
     print(f"Bars loaded: {len(df):,}; range {df['time'].min()} to {df['time'].max()}")
     print("Spread validation: PASS. Missing/invalid/all-zero spread causes a hard failure.")
     print(f"Development window ends before {dev_end}; holdout starts {hold_start.date()} and is sealed by default.")
-    summaries, annuals, final_rows = [], [], []
+    summaries, annuals, final_rows, final_annuals = [], [], [], []
     for slip in ex["slippage_usd_scenarios"]:
         dev_trades = run_simulation(dev_df, cfg, slip)
         if dev_trades.empty:
@@ -55,6 +55,7 @@ def main():
             hold = run_simulation(hold_df, cfg, slip)
             if not hold.empty:
                 hold["entry_time"] = pd.to_datetime(hold["entry_time"], utc=True)
+            final_annuals.append(annual_report(hold).assign(slippage_usd=float(slip)))
             final_rows.append(summarize_trades(hold, label=f"FINAL HOLDOUT slippage={slip:.2f}",
                 repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
                 seed=val["bootstrap_seed"]))
@@ -67,12 +68,7 @@ def main():
         pd.DataFrame(final_rows).to_csv(reports / "snr_holdout_final.csv", index=False)
         print("\n=== FINAL HOLDOUT ===")
         print(pd.DataFrame(final_rows).to_string(index=False))
-        hold_annual = []
-        for slip in ex["slippage_usd_scenarios"]:
-            hold_df = df.loc[df["time"] >= hold_start].copy()
-            hold_trades = run_simulation(hold_df, cfg, slip)
-            hold_annual.append(annual_report(hold_trades).assign(slippage_usd=float(slip)))
-        pd.concat(hold_annual, ignore_index=True).to_csv(reports / "snr_holdout_annual_final.csv", index=False)
+        pd.concat(final_annuals, ignore_index=True).to_csv(reports / "snr_holdout_annual_final.csv", index=False)
     else:
         print("HOLDOUT SEALED: its simulator was not run and no holdout metrics were written.")
 
