@@ -32,6 +32,7 @@ def main():
         spread_points_multiplier=ex["spread_points_multiplier"])
     dev_end = pd.Timestamp(val["development_end"], tz="UTC") + pd.Timedelta(days=1)
     hold_start = pd.Timestamp(val["holdout_start"], tz="UTC")
+    dev_cutoff = dev_end - pd.Timedelta(minutes=5 * s["max_hold_bars"])
     dev_df = df.loc[df["time"] < dev_end].copy()
     print(f"Bars loaded: {len(df):,}; range {df['time'].min()} to {df['time'].max()}")
     print("Spread validation: PASS. Missing/invalid/all-zero spread causes a hard failure.")
@@ -43,7 +44,7 @@ def main():
             dev_trades = pd.DataFrame(columns=["entry_time", "exit_time", "R"])
         dev_trades["entry_time"] = pd.to_datetime(dev_trades["entry_time"], utc=True)
         dev_trades["exit_time"] = pd.to_datetime(dev_trades["exit_time"], utc=True)
-        dev_trades = dev_trades[(dev_trades["entry_time"] < dev_end) & (dev_trades["exit_time"] < dev_end)]
+        dev_trades = dev_trades[(dev_trades["entry_time"] < dev_cutoff) & (dev_trades["exit_time"] < dev_end)]
         summaries.append(summarize_trades(dev_trades, label=f"development slippage={slip:.2f}",
             repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
             seed=val["bootstrap_seed"]))
@@ -55,6 +56,9 @@ def main():
             hold = run_simulation(hold_df, cfg, slip)
             if not hold.empty:
                 hold["entry_time"] = pd.to_datetime(hold["entry_time"], utc=True)
+                hold["exit_time"] = pd.to_datetime(hold["exit_time"], utc=True)
+                hold_cutoff = pd.to_datetime(df["time"].max(), utc=True) - pd.Timedelta(minutes=5 * s["max_hold_bars"])
+                hold = hold.loc[(hold["entry_time"] < hold_cutoff) & (hold["exit_time"] <= df["time"].max())]
             final_annuals.append(annual_report(hold).assign(slippage_usd=float(slip)))
             final_rows.append(summarize_trades(hold, label=f"FINAL HOLDOUT slippage={slip:.2f}",
                 repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
