@@ -33,6 +33,7 @@ def main():
     dev_end = pd.Timestamp(val["development_end"], tz="UTC") + pd.Timedelta(days=1)
     hold_start = pd.Timestamp(val["holdout_start"], tz="UTC")
     dev_cutoff = dev_end - pd.Timedelta(minutes=5 * s["max_hold_bars"])
+    dev_years = range(int(df["time"].min().year), dev_end.year)
     dev_df = df.loc[df["time"] < dev_end].copy()
     print(f"Bars loaded: {len(df):,}; range {df['time'].min()} to {df['time'].max()}")
     print("Spread validation: PASS. Missing/invalid/all-zero spread causes a hard failure.")
@@ -48,7 +49,7 @@ def main():
         summaries.append(summarize_trades(dev_trades, label=f"development slippage={slip:.2f}",
             repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
             seed=val["bootstrap_seed"]))
-        annuals.append(annual_report(dev_trades).assign(slippage_usd=float(slip)))
+        annuals.append(annual_report(dev_trades, years=dev_years).assign(slippage_usd=float(slip)))
         # Holdout simulator is not run at all unless both switches are explicitly enabled.
         if args.final_unseal and val.get("holdout_enabled", False):
             # Start the holdout simulation flat while retaining pre-holdout indicator/zone history.
@@ -59,7 +60,8 @@ def main():
                 hold["exit_time"] = pd.to_datetime(hold["exit_time"], utc=True)
                 hold_cutoff = pd.to_datetime(df["time"].max(), utc=True) - pd.Timedelta(minutes=5 * s["max_hold_bars"])
                 hold = hold.loc[(hold["entry_time"] < hold_cutoff) & (hold["exit_time"] <= df["time"].max())]
-            final_annuals.append(annual_report(hold).assign(slippage_usd=float(slip)))
+            hold_years = range(hold_start.year, int(df["time"].max().year) + 1)
+            final_annuals.append(annual_report(hold, years=hold_years).assign(slippage_usd=float(slip)))
             final_rows.append(summarize_trades(hold, label=f"FINAL HOLDOUT slippage={slip:.2f}",
                 repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
                 seed=val["bootstrap_seed"]))
