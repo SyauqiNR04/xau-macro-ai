@@ -67,6 +67,12 @@ def main():
         pd.DataFrame(final_rows).to_csv(reports / "snr_holdout_final.csv", index=False)
         print("\n=== FINAL HOLDOUT ===")
         print(pd.DataFrame(final_rows).to_string(index=False))
+        hold_annual = []
+        for slip in ex["slippage_usd_scenarios"]:
+            hold_df = df.loc[df["time"] >= hold_start].copy()
+            hold_trades = run_simulation(hold_df, cfg, slip)
+            hold_annual.append(annual_report(hold_trades).assign(slippage_usd=float(slip)))
+        pd.concat(hold_annual, ignore_index=True).to_csv(reports / "snr_holdout_annual_final.csv", index=False)
     else:
         print("HOLDOUT SEALED: its simulator was not run and no holdout metrics were written.")
 
