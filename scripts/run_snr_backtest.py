@@ -50,12 +50,11 @@ def main():
         annuals.append(annual_report(dev_trades).assign(slippage_usd=float(slip)))
         # Holdout simulator is not run at all unless both switches are explicitly enabled.
         if args.final_unseal and val.get("holdout_enabled", False):
-            all_trades = run_simulation(df, cfg, slip)
-            if not all_trades.empty:
-                all_trades["entry_time"] = pd.to_datetime(all_trades["entry_time"], utc=True)
-                hold = all_trades.loc[all_trades["entry_time"] >= hold_start].copy()
-            else:
-                hold = all_trades
+            # Start the holdout simulation flat while retaining pre-holdout indicator/zone history.
+            hold_df = df.loc[df["time"] >= hold_start].copy()
+            hold = run_simulation(hold_df, cfg, slip)
+            if not hold.empty:
+                hold["entry_time"] = pd.to_datetime(hold["entry_time"], utc=True)
             final_rows.append(summarize_trades(hold, label=f"FINAL HOLDOUT slippage={slip:.2f}",
                 repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
                 seed=val["bootstrap_seed"]))
