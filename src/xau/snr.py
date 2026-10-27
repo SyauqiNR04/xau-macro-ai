@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import numpy as np
 import pandas as pd
 from .data import add_indicators, align_closed_timeframe, load_bars
@@ -69,7 +70,8 @@ def _zones_at(pivots, now, price, atr, max_age_days, tolerance_atr, min_pivots, 
 
 def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_days=120,
                   tolerance_atr=0.25, min_pivots=3, max_width_atr=0.8,
-                  min_body_range_ratio=0.55, spread_points_multiplier=0.001):
+                  min_body_range_ratio=0.55, spread_points_multiplier=0.001,
+                  start_time=None, end_time=None):
     raw_dir = str(raw_dir)
     m5 = add_indicators(load_bars(f"{raw_dir}/{symbol_file}_m5.csv", require_spread=True,
                                   spread_points_multiplier=spread_points_multiplier), "m5")
@@ -107,11 +109,41 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
     signal = np.zeros(len(df), dtype=np.int8)
     zone_score = np.zeros(len(df), dtype=np.int32)
     zone_kind = np.full(len(df), "", dtype=object)
+    zone_low = np.full(len(df), np.nan, dtype=float)
+    zone_high = np.full(len(df), np.nan, dtype=float)
+    zone_mid = np.full(len(df), np.nan, dtype=float)
+    zone_pivots = np.zeros(len(df), dtype=np.int32)
+    zone_timeframes = np.zeros(len(df), dtype=np.int8)
+
+    # Incremental mode reconstructs the active pivot set at the checkpoint,
+    # then evaluates only candles after that checkpoint. Indicators and pivot
+    # candidates are still derived from full history to preserve their values.
+    start_idx = 0
+    end_idx = len(df)
     cursor, expiry_cursor = 0, 0
     active_map, active_cache = {}, pd.DataFrame()
     active_prices = np.array([], dtype=float)
-    for i, row in enumerate(df.itertuples(index=False)):
+    if start_time is not None:
+        start_time = pd.to_datetime(start_time, utc=True)
+        start_idx = int(df["signal_time"].searchsorted(start_time, side="right"))
+        active_at_start = pivots.loc[
+            (pivots["confirmed_at"] <= start_time) &
+            (pivots["expires_at"] > start_time)
+        ]
+        active_map = {int(p["pivot_id"]): p for _, p in active_at_start.iterrows()}
+        cursor = int(pivots["confirmed_at"].searchsorted(start_time, side="right"))
+        expiry_cursor = int(expiry_events["expires_at"].searchsorted(start_time, side="right"))
+        if active_map:
+            active_cache = pd.DataFrame(list(active_map.values()))
+            active_prices = active_cache["price"].to_numpy(dtype=float)
+    if end_time is not None:
+        end_time = pd.to_datetime(end_time, utc=True)
+        end_idx = int(df["signal_time"].searchsorted(end_time, side="right"))
+
+    latest_zones = []
+    for i, row in enumerate(df.iloc[start_idx:end_idx].itertuples(index=False), start=start_idx):
         now = row.signal_time
+        latest_zones = []
         changed = False
         while cursor < len(pivots) and pivots.iloc[cursor]["confirmed_at"] <= now:
             p = pivots.iloc[cursor]
@@ -140,6 +172,7 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
         nearby = active.iloc[nearby_idx]
         zones = _zones_at(nearby, now, float(row.close), float(atr), max_age_days,
                           tolerance_atr, min_pivots, max_width_atr)
+        latest_zones = zones
         if not zones:
             continue
         bull_momentum, bear_momentum = bool(row.bull_momentum), bool(row.bear_momentum)
@@ -162,7 +195,14 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
         if choices:
             direction, zone = max(choices, key=lambda item: (item[1]["pivots"], item[1]["timeframes"]))
             signal[i], zone_score[i], zone_kind[i] = direction, zone["pivots"] + zone["timeframes"], zone["kind"]
+            zone_low[i], zone_high[i], zone_mid[i] = zone["low"], zone["high"], zone["mid"]
+            zone_pivots[i], zone_timeframes[i] = zone["pivots"], zone["timeframes"]
     df["signal"], df["zone_score"], df["zone_kind"] = signal, zone_score, zone_kind
+    df["zone_low"], df["zone_high"], df["zone_mid"] = zone_low, zone_high, zone_mid
+    df["zone_pivots"], df["zone_timeframes"] = zone_pivots, zone_timeframes
+    df["current_zones_json"] = ""
+    if end_idx > start_idx:
+        df.loc[df.index[end_idx - 1], "current_zones_json"] = json.dumps(latest_zones, separators=(",", ":"))
     return df
 
 
