@@ -81,6 +81,19 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
     pivots = pd.concat([confirmed_pivots(m15, "m15", left, right),
                         confirmed_pivots(h1, "h1", left, right)], ignore_index=True)
     pivots = pivots.sort_values("confirmed_at").reset_index(drop=True)
+    # Vectorized candle/EMA predicates; the remaining loop only maintains causal zone state.
+    candle_range = (df["high"] - df["low"]).clip(lower=1e-9)
+    body = (df["close"] - df["open"]).abs()
+    df["lower_wick"] = df[["open", "close"]].min(axis=1) - df["low"]
+    df["upper_wick"] = df["high"] - df[["open", "close"]].max(axis=1)
+    df["bull_momentum"] = ((df["close"] > df["open"]) &
+        (body / candle_range >= min_body_range_ratio) & (df["close"] > df["prev_high3"]))
+    df["bear_momentum"] = ((df["close"] < df["open"]) &
+        (body / candle_range >= min_body_range_ratio) & (df["close"] < df["prev_low3"]))
+    df["h4_bull"] = df["h4_ema50"] > df["h4_ema200"]
+    df["h4_bear"] = df["h4_ema50"] < df["h4_ema200"]
+    df["h1_bull"] = df["h1_ema20"] > df["h1_ema50"]
+    df["h1_bear"] = df["h1_ema20"] < df["h1_ema50"]
 
     # Pivot detection and candle predicates are vectorized. Zone clustering is
     # intentionally causal/stateful so future pivots cannot alter past zones.
@@ -105,14 +118,11 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
                           tolerance_atr, min_pivots, max_width_atr)
         if not zones:
             continue
-        candle_range = max(float(row.high - row.low), 1e-9)
+        bull_momentum, bear_momentum = bool(row.bull_momentum), bool(row.bear_momentum)
+        lower_wick, upper_wick = float(row.lower_wick), float(row.upper_wick)
+        h4_bull, h4_bear = bool(row.h4_bull), bool(row.h4_bear)
+        h1_bull, h1_bear = bool(row.h1_bull), bool(row.h1_bear)
         body = abs(float(row.close - row.open))
-        lower_wick = min(float(row.open), float(row.close)) - float(row.low)
-        upper_wick = float(row.high) - max(float(row.open), float(row.close))
-        bull_momentum = row.close > row.open and body / candle_range >= min_body_range_ratio and row.close > row.prev_high3
-        bear_momentum = row.close < row.open and body / candle_range >= min_body_range_ratio and row.close < row.prev_low3
-        h4_bull, h4_bear = row.h4_ema50 > row.h4_ema200, row.h4_ema50 < row.h4_ema200
-        h1_bull, h1_bear = row.h1_ema20 > row.h1_ema50, row.h1_ema20 < row.h1_ema50
         choices = []
         for z in zones:
             if not (row.low <= z["high"] and row.high >= z["low"]):
