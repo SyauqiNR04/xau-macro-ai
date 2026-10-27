@@ -40,3 +40,19 @@ def test_all_zero_spread_fails_hard(tmp_path):
     pd.DataFrame({"time": ["2026-01-01T00:00:00Z"], "open": [1], "high": [2], "low": [0.5], "close": [1.5], "spread": [0]}).to_csv(p, index=False)
     with pytest.raises(ValueError, match="zero for every row"):
         load_bars(p, require_spread=True)
+
+
+def test_vectorized_simulator_checks_entry_candle():
+    from xau.snr import simulate_vectorized
+    t = pd.date_range('2026-01-01', periods=5, freq='5min', tz='UTC')
+    df = pd.DataFrame({
+        'time': t, 'open': [100, 100, 100, 100, 100],
+        'high': [101, 104, 101, 101, 101], 'low': [99, 99, 99, 99, 99],
+        'close': [100, 101, 100, 100, 100], 'spread_price': [0.1]*5,
+        'm5_atr14': [1.0]*5, 'signal': [1, 0, 0, 0, 0],
+        'zone_score': [3, 0, 0, 0, 0], 'zone_kind': ['SUPPORT', '', '', '', '']
+    })
+    trades = simulate_vectorized(df, slippage_usd=0.1, atr_stop_mult=1.5, target_r=2.0, max_hold_bars=3)
+    assert len(trades) == 1
+    assert trades.iloc[0].exit_reason == 'TP'
+    assert trades.iloc[0].exit_time == t[1]
