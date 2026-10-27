@@ -38,8 +38,12 @@ def confirmed_pivots(df, tf, left=3, right=3):
 
 
 def _zones_at(pivots, now, price, atr, max_age_days, tolerance_atr, min_pivots, max_width_atr):
+    # Only pivots within the widest possible qualifying zone can matter at this price.
+    radius = atr * (max_width_atr + tolerance_atr)
     eligible = pivots[(pivots["confirmed_at"] <= now) &
-                      ((now - pivots["pivot_time"]) <= pd.Timedelta(days=max_age_days))]
+                      ((now - pivots["pivot_time"]) <= pd.Timedelta(days=max_age_days)) &
+                      (pivots["price"] >= price - radius) &
+                      (pivots["price"] <= price + radius)]
     zones = []
     for kind in ("SUPPORT", "RESISTANCE"):
         group = eligible.loc[eligible["kind"] == kind].sort_values("price")
@@ -81,6 +85,9 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
     pivots = pd.concat([confirmed_pivots(m15, "m15", left, right),
                         confirmed_pivots(h1, "h1", left, right)], ignore_index=True)
     pivots = pivots.sort_values("confirmed_at").reset_index(drop=True)
+    pivots["pivot_id"] = np.arange(len(pivots), dtype=np.int64)
+    pivots["expires_at"] = pivots["pivot_time"] + pd.Timedelta(days=max_age_days)
+    expiry_events = pivots.sort_values("expires_at").reset_index(drop=True)
     # Vectorized candle/EMA predicates; the remaining loop only maintains causal zone state.
     candle_range = (df["high"] - df["low"]).clip(lower=1e-9)
     body = (df["close"] - df["open"]).abs()
@@ -100,17 +107,26 @@ def build_signals(raw_dir, symbol_file="xauusdm", *, left=3, right=3, max_age_da
     signal = np.zeros(len(df), dtype=np.int8)
     zone_score = np.zeros(len(df), dtype=np.int32)
     zone_kind = np.full(len(df), "", dtype=object)
-    cursor, active_parts = 0, []
+    cursor, expiry_cursor = 0, 0
+    active_map, active_cache = {}, pd.DataFrame()
     for i, row in enumerate(df.itertuples(index=False)):
         now = row.signal_time
+        changed = False
         while cursor < len(pivots) and pivots.iloc[cursor]["confirmed_at"] <= now:
-            active_parts.append(pivots.iloc[cursor])
+            p = pivots.iloc[cursor]
+            active_map[int(p["pivot_id"])] = p
             cursor += 1
-        if not active_parts:
+            changed = True
+        while expiry_cursor < len(expiry_events) and expiry_events.iloc[expiry_cursor]["expires_at"] <= now:
+            pid = int(expiry_events.iloc[expiry_cursor]["pivot_id"])
+            active_map.pop(pid, None)
+            expiry_cursor += 1
+            changed = True
+        if changed:
+            active_cache = pd.DataFrame(list(active_map.values()))
+        if active_cache.empty:
             continue
-        active = pd.DataFrame(active_parts)
-        active = active.loc[(now - active["pivot_time"]) <= pd.Timedelta(days=max_age_days)]
-        active_parts = [p for p in active_parts if now - p["pivot_time"] <= pd.Timedelta(days=max_age_days)]
+        active = active_cache
         atr = row.m5_atr14
         if not np.isfinite(atr) or atr <= 0 or not np.isfinite(row.h4_ema200) or not np.isfinite(row.h1_ema50):
             continue
