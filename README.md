@@ -43,7 +43,7 @@ Hanya pada keputusan final:
 1. Review dan simpan hasil development beserta konfigurasi/commit yang diuji.
 2. Ubah validation.holdout_enabled menjadi true.
 3. Jalankan python .\src\backtest_snr_v1.py --final-unseal tepat sekali.
-4. Simpan reports/snr_holdout_final.csv. Jangan kembali mengoptimasi parameter berdasarkan hasil holdout; jika diubah, holdout tersebut tidak lagi murni.
+4. Simpan reports/snr_holdout_final.csv dan reports/snr_holdout_annual_final.csv. Jangan kembali mengoptimasi parameter berdasarkan hasil holdout; jika diubah, holdout tersebut tidak lagi murni.
 
 Holdout saat ini dikonfigurasi mulai 2025-01-01. Karena data historis pernah dipakai pada eksperimen strategi lain, sebut ini holdout khusus eksperimen SnR, bukan data yang secara universal belum pernah dilihat.
 
