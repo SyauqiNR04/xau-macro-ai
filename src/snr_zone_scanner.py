@@ -184,11 +184,24 @@ def cluster_zones(pivots, now, current_atr):
         return result
 
     result["zone_width"] = result["zone_high"] - result["zone_low"]
+
+    # Mark any support/resistance overlap as conflict, not as two independent zones.
+    result["overlap_conflict"] = False
+    supports = result[result["kind"] == "SUPPORT"]
+    resistances = result[result["kind"] == "RESISTANCE"]
+    for s_idx, support in supports.iterrows():
+        for r_idx, resistance in resistances.iterrows():
+            if max(support["zone_low"], resistance["zone_low"]) <= min(
+                support["zone_high"], resistance["zone_high"]
+            ):
+                result.loc[[s_idx, r_idx], "overlap_conflict"] = True
+
     result["quality"] = np.select(
         [result["score"] >= 6, result["score"] >= 4],
         ["STRONG_CANDIDATE", "MODERATE_CANDIDATE"],
         default="WEAK",
     )
+    result.loc[result["overlap_conflict"], "quality"] = "CONFLICT_OVERLAP"
     return result.sort_values(["score", "last_pivot_time"], ascending=[False, False])
 
 
@@ -340,7 +353,34 @@ def main():
     zone_path = REPORTS / "snr_zones_latest.csv"
     zones.to_csv(zone_path, index=False)
 
-    signals = candle_signal(m5, m15, h1, h4, zones)
+    # Do not generate entry candidates from zones overlapping an opposing zone.
+    usable_zones = zones[~zones["overlap_conflict"]].copy()
+    if usable_zones.empty:
+        signals = pd.DataFrame([{
+            "signal_time_utc": m5["time"].iloc[-1],
+            "direction": "NONE",
+            "status": "NO_TRADE",
+            "reason": "Semua zona konflik karena support/resistance saling beririsan.",
+        }])
+    else:
+        signals = candle_signal(m5, m15, h1, h4, usable_zones)
+
+    # Historical data must never be presented as a current trading signal.
+    latest_closed_time = m5["time"].iloc[-1] + pd.Timedelta(minutes=5)
+    data_age_minutes = (
+        pd.Timestamp.now(tz="UTC") - latest_closed_time
+    ).total_seconds() / 60
+    if data_age_minutes > 30:
+        signals = pd.DataFrame([{
+            "signal_time_utc": latest_closed_time,
+            "direction": "NONE",
+            "status": "STALE_DATA",
+            "reason": (
+                f"Data M5 terakhir berumur {data_age_minutes:.0f} menit; "
+                "perbarui data MT5 sebelum analisis."
+            ),
+        }])
+
     signal_path = REPORTS / "snr_signals_latest.csv"
     signals.to_csv(signal_path, index=False)
 
@@ -357,6 +397,9 @@ def main():
             "timeframes", "age_days", "score", "quality", "distance_from_price"]
     print(zones[cols].head(12).round(3).to_string(index=False))
 
+    print("\n=== VALIDITAS DATA ===")
+    print(f"Umur candle M5 terakhir: {data_age_minutes:.0f} menit")
+    print("Zona konflik S/R:", int(zones["overlap_conflict"].sum()), "dari", len(zones))
     print("\n=== PEMERIKSAAN ENTRY M5 ===")
     print(signals.to_string(index=False))
     print("\nOutput:")
