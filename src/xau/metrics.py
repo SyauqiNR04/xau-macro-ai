@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+
 def expectancy_bootstrap_ci(values, *, repetitions=5000, confidence=0.95, seed=20261027):
     """Percentile bootstrap CI for mean trade R."""
     x = np.asarray(values, dtype=float)
@@ -21,6 +22,7 @@ def expectancy_bootstrap_ci(values, *, repetitions=5000, confidence=0.95, seed=2
     lo, hi = np.quantile(means, [alpha / 2, 1 - alpha / 2])
     return {"n": int(len(x)), "expectancy_R": float(x.mean()), "ci_low_R": float(lo), "ci_high_R": float(hi)}
 
+
 def summarize_trades(trades, *, label, repetitions=5000, confidence=0.95, seed=20261027):
     if trades.empty:
         return {"strategy": label, "trades": 0, "win_rate_pct": np.nan, "expectancy_R": np.nan,
@@ -36,19 +38,28 @@ def summarize_trades(trades, *, label, repetitions=5000, confidence=0.95, seed=2
             "profit_factor": float(gp/gl) if gl else np.inf, "net_R": float(r.sum()),
             "max_drawdown_R": float(dd.min())}
 
-def annual_report(trades):
+
+def annual_report(trades, *, years=None):
+    """Annual metrics; when years is supplied, include zero-trade years explicitly."""
     cols = ["year", "trades", "win_rate_pct", "expectancy_R", "net_R", "profit_factor"]
-    if trades.empty:
-        return pd.DataFrame(columns=cols)
     df = trades.copy()
-    df["entry_time"] = pd.to_datetime(df["entry_time"], utc=True, errors="raise")
-    df["year"] = df.entry_time.dt.year
+    if not df.empty:
+        df["entry_time"] = pd.to_datetime(df["entry_time"], utc=True, errors="raise")
+        df["year"] = df.entry_time.dt.year
+    if years is None:
+        years = sorted(df["year"].unique()) if not df.empty else []
     rows = []
-    for year, group in df.groupby("year", sort=True):
+    for year in years:
+        group = df.loc[df["year"] == year] if not df.empty else pd.DataFrame()
+        if group.empty:
+            rows.append({"year": int(year), "trades": 0, "win_rate_pct": np.nan,
+                         "expectancy_R": np.nan, "net_R": 0.0, "profit_factor": np.nan})
+            continue
         r = pd.to_numeric(group["R"], errors="coerce").dropna()
         gp, gl = r[r > 0].sum(), -r[r < 0].sum()
         rows.append({"year": int(year), "trades": int(len(r)),
                      "win_rate_pct": float((r > 0).mean()*100) if len(r) else np.nan,
                      "expectancy_R": float(r.mean()) if len(r) else np.nan,
-                     "net_R": float(r.sum()), "profit_factor": float(gp/gl) if gl else np.inf})
-    return pd.DataFrame(rows)
+                     "net_R": float(r.sum()),
+                     "profit_factor": float(gp/gl) if gl else np.inf})
+    return pd.DataFrame(rows, columns=cols)
