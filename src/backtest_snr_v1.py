@@ -73,7 +73,7 @@ def merge_tf(base, tfdf, prefix, duration):
     tfdf["available_at"] = tfdf["time"] + duration
     cols = ["available_at", "close", f"{prefix}_ema20", f"{prefix}_ema50",
             f"{prefix}_ema200", f"{prefix}_atr14"]
-    tfdf = tfdf[cols].rename(columns={c: f"{prefix}_{c}" for c in cols if c != "available_at"})
+    tfdf = tfdf[cols].rename(columns={"close": f"{prefix}_close"})
     return pd.merge_asof(base.sort_values("signal_time"), tfdf.sort_values("available_at"),
                          left_on="signal_time", right_on="available_at",
                          direction="backward").drop(columns="available_at")
