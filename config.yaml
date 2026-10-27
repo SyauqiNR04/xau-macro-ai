@@ -1,0 +1,31 @@
+data:
+  symbol_file: xauusdm
+  raw_dir: data/raw
+  processed_dir: data/processed
+  reports_dir: reports
+strategy:
+  point: 0.001
+  pivot_left: 3
+  pivot_right: 3
+  max_pivot_age_days: 120
+  zone_tolerance_atr: 0.25
+  min_zone_pivots: 3
+  max_zone_width_atr: 0.8
+  atr_stop_mult: 1.5
+  target_r: 2.0
+  max_hold_bars: 48
+  min_body_range_ratio: 0.55
+execution:
+  slippage_usd_scenarios: [0.05, 0.10, 0.20]
+  spread_column: spread
+  spread_points_multiplier: 0.001
+  fail_on_missing_spread: true
+  fail_on_missing_spread_values: true
+  fail_if_all_spread_zero: true
+validation:
+  development_end: "2024-12-31"
+  holdout_start: "2025-01-01"
+  holdout_enabled: false
+  bootstrap_repetitions: 5000
+  bootstrap_confidence: 0.95
+  bootstrap_seed: 20261027
