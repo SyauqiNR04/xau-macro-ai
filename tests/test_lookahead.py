@@ -56,3 +56,19 @@ def test_vectorized_simulator_checks_entry_candle():
     assert len(trades) == 1
     assert trades.iloc[0].exit_reason == 'TP'
     assert trades.iloc[0].exit_time == t[1]
+
+def test_missing_spread_values_fail_hard(tmp_path):
+    p = tmp_path / "bars.csv"
+    pd.DataFrame({"time": ["2026-01-01T00:00:00Z", "2026-01-01T00:05:00Z"],
+                  "open": [1, 1], "high": [2, 2], "low": [0.5, 0.5],
+                  "close": [1.5, 1.5], "spread": [10, None]}).to_csv(p, index=False)
+    with pytest.raises(ValueError, match="missing/non-numeric spread"):
+        load_bars(p, require_spread=True)
+
+
+def test_annual_report_includes_zero_trade_years():
+    from xau.metrics import annual_report
+    trades = pd.DataFrame({"entry_time": [pd.Timestamp("2023-03-01", tz="UTC")], "R": [1.0]})
+    report = annual_report(trades, years=[2022, 2023, 2024])
+    assert report["year"].tolist() == [2022, 2023, 2024]
+    assert report["trades"].tolist() == [0, 1, 0]
