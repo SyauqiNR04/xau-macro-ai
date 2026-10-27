@@ -191,6 +191,7 @@ def main():
             sl_atr=[1.0, 1.5, 2.0],
             rr=[1.0, 1.5, 2.0],
             ema_fast=[10, 20, 30],
+            max_leverage=[args.leverage],
             maximize="SQN",
             constraint=lambda p: p.ema_fast < p.ema_mid < p.ema_slow,
         )
