@@ -57,6 +57,7 @@ def main():
     filtered = df.copy()
     filtered["signal"] = filtered["signal"].where((macro_dir == filtered["signal"]) & (factors >= 1), 0)
     dev_end = pd.Timestamp(val["development_end"], tz="UTC") + pd.Timedelta(days=1)
+    dev_cutoff = dev_end - pd.Timedelta(minutes=5 * s["max_hold_bars"])
     # Never run this comparison on the sealed holdout.
     base_dev = df.loc[df["time"] < dev_end].copy()
     filt_dev = filtered.loc[filtered["time"] < dev_end].copy()
@@ -68,7 +69,7 @@ def main():
             if not trades.empty:
                 trades["entry_time"] = pd.to_datetime(trades["entry_time"], utc=True)
                 trades["exit_time"] = pd.to_datetime(trades["exit_time"], utc=True)
-                trades = trades[(trades["entry_time"] < dev_end) & (trades["exit_time"] < dev_end)]
+                trades = trades[(trades["entry_time"] < dev_cutoff) & (trades["exit_time"] < dev_end)]
             summaries.append(summarize_trades(trades, label=f"{label}; slip={slip:.2f}",
                 repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
                 seed=val["bootstrap_seed"]))
