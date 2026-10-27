@@ -58,6 +58,7 @@ def main():
     filtered["signal"] = filtered["signal"].where((macro_dir == filtered["signal"]) & (factors >= 1), 0)
     dev_end = pd.Timestamp(val["development_end"], tz="UTC") + pd.Timedelta(days=1)
     dev_cutoff = dev_end - pd.Timedelta(minutes=5 * s["max_hold_bars"])
+    dev_years = range(int(df["time"].min().year), dev_end.year)
     # Never run this comparison on the sealed holdout.
     base_dev = df.loc[df["time"] < dev_end].copy()
     filt_dev = filtered.loc[filtered["time"] < dev_end].copy()
@@ -73,7 +74,7 @@ def main():
             summaries.append(summarize_trades(trades, label=f"{label}; slip={slip:.2f}",
                 repetitions=val["bootstrap_repetitions"], confidence=val["bootstrap_confidence"],
                 seed=val["bootstrap_seed"]))
-            annuals.append(annual_report(trades).assign(strategy=label, slippage_usd=float(slip)))
+            annuals.append(annual_report(trades, years=dev_years).assign(strategy=label, slippage_usd=float(slip)))
     pd.DataFrame(summaries).to_csv(reports / "snr_macro_filter_development.csv", index=False)
     pd.concat(annuals, ignore_index=True).to_csv(reports / "snr_macro_filter_annual.csv", index=False)
     print("DEVELOPMENT ONLY — no holdout was simulated or reported.")
